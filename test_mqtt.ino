@@ -3,72 +3,67 @@
 #include <DHT_U.h>
 #include <SPI.h>
 #include <PubSubClient.h>
+#include <WiFi101.h>
 
 #define DHTTYPE           DHT22
 #define DHTPIN            12
-#include <WiFi101.h>
+#define LEDPIN            13
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
+int highT = 0, lowT = 0, curT = 0;
+
 uint32_t delayMS;
 char message[100];
+char high[10], low[10];
 WiFiClient ethClient;
 PubSubClient mqttClient(ethClient);
- 
+sensors_event_t event;
+
 void callback(char* topic, byte* payload, unsigned int length) {
 
   //read the sensor reading here
-  
+
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
   int i;
-  for (i=0;i<length;i++) {
+  for (i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
-    message[i]=payload[i];
+    message[i] = payload[i];
   }
-  
-  message[i]='\0';
+
+  message[i] = '\0';
   Serial.println();
   String msg = String(message);
 
-  if(msg.equals("Alive?")){
-    mqttClient.publish("status/","I'm Alive");
+  if (msg.equals("Alive?")) {
+    mqttClient.publish("status/", "I'm Alive");
   }
-  else if(msg.equals("temp")){
+  else if (msg.equals("temp")) {
     //return temperature value
-    sensors_event_t event;  
-    dht.temperature().getEvent(&event);
-//    if (isnan(event.temperature)) {
-//      Serial.println("Error reading temperature!");
-//    }
-//    else {
-     Serial.print("Temperature: ");
-     Serial.println(event.temperature);
-//    }  
-     int t = (int)event.temperature;
-     String curTempStr = String(event.temperature);
-     char buff[10];
-     curTempStr.toCharArray(buff,10);
-     Serial.println(buff);
-     mqttClient.publish("status/",buff);
+    Serial.print("Temperature: ");
+    Serial.println(event.temperature);
+    //    }
+    int t = (int)event.temperature;
+    String curTempStr = String(event.temperature);
+    char buff[10];
+    curTempStr.toCharArray(buff, 10);
+    Serial.println(buff);
+    mqttClient.publish("status/", buff);
   }
-  else{
-    String reqTempStr = msg.substring(5);
-    int reqTemp = reqTempStr.toInt();
-    //Serial.println(reqTemp);
-    Serial.println("REQUIRED TEMPERATURE: " + reqTempStr);
-    delay(reqTemp*1000);
-    
-
+  else {
+    // incoming message = "t1:t2"
+    int colonIdx = msg.indexOf(":");
+    String l = msg.substring(0, colonIdx);
+    String h = msg.substring(colonIdx + 1, msg.length());
+    Serial.println("HIGH AND LOW: " + h + ":::" + l);
+    highT = h.toInt();
+    lowT = l.toInt();
+    curT = (int)event.temperature;
   }
-  
-  //look for temp in message,compare it to what is now and turn on fan for that amount of time
-  //::To calculate time, invent a formula for amount of time required to keep the fan running.
-  //hint: write a loop to keep fan running since callback will be called only when the message is received(only once)
-    
 }
- 
+
 void reconnect() {
   // Loop until we're reconnected
   while (!mqttClient.connected()) {
@@ -77,7 +72,7 @@ void reconnect() {
     if (mqttClient.connect("arduinoClient")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      mqttClient.publish("status/","I'm Alive");
+      mqttClient.publish("status/", "I'm Alive");
       // ... and resubscribe
       mqttClient.subscribe("control/#");
     } else {
@@ -89,32 +84,41 @@ void reconnect() {
     }
   }
 }
- 
+
 void setup()
 {
-  WiFi.setPins(8,7,4,2);
+  WiFi.setPins(8, 7, 4, 2);
   Serial.begin(9600);
   dht.begin();
+  pinMode(LEDPIN, OUTPUT);
+  digitalWrite(LEDPIN,LOW);
   sensor_t sensor;
+  dht.temperature().getEvent(&event);
   dht.temperature().getSensor(&sensor);
   dht.humidity().getSensor(&sensor);
-  
-  WiFi.begin("UHWireless");
+
+  WiFi.begin("Tampi", "aman1995");
   delay(10000);
- 
-  mqttClient.setServer("ec2-54-165-84-13.compute-1.amazonaws.com", 1883);
+
+  mqttClient.setServer("ec2-52-91-85-14.compute-1.amazonaws.com", 1883);
   mqttClient.setCallback(callback);
- 
+
   // Allow the hardware to sort itself out
   delay(1500);
 }
- 
+
 void loop()
 {
   if (!mqttClient.connected()) {
     reconnect();
   }
-//  mqttClient.publish("status/","Alive");
-//  delay(10000);
+
+  if(curT < highT && curT > lowT){
+    digitalWrite(LEDPIN,HIGH);  
+  }
+  else{
+    digitalWrite(LEDPIN,LOW);
+  }
+
   mqttClient.loop();
 }
