@@ -11,7 +11,7 @@
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
-int highT = 0, lowT = 0, curT = 0;
+int highT = 0, lowT = 0;
 
 uint32_t delayMS;
 char message[100];
@@ -23,7 +23,7 @@ sensors_event_t event;
 void callback(char* topic, byte* payload, unsigned int length) {
 
   //read the sensor reading here
-
+  dht.temperature().getEvent(&event);
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -60,7 +60,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println("HIGH AND LOW: " + h + ":::" + l);
     highT = h.toInt();
     lowT = l.toInt();
-    curT = (int)event.temperature;
+//    curT = (int)event.temperature;
   }
 }
 
@@ -91,9 +91,8 @@ void setup()
   Serial.begin(9600);
   dht.begin();
   pinMode(LEDPIN, OUTPUT);
-  digitalWrite(LEDPIN,LOW);
+  digitalWrite(LEDPIN, LOW);
   sensor_t sensor;
-  dht.temperature().getEvent(&event);
   dht.temperature().getSensor(&sensor);
   dht.humidity().getSensor(&sensor);
 
@@ -112,12 +111,12 @@ void loop()
   if (!mqttClient.connected()) {
     reconnect();
   }
-
-  if(curT < highT && curT > lowT){
-    digitalWrite(LEDPIN,HIGH);  
+  dht.temperature().getEvent(&event);
+  if ((int)event.temperature < highT && (int)event.temperature > lowT) {
+    digitalWrite(LEDPIN, HIGH);
   }
-  else{
-    digitalWrite(LEDPIN,LOW);
+  else {
+    digitalWrite(LEDPIN, LOW);
   }
 
   mqttClient.loop();
